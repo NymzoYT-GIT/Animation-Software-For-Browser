@@ -1,0 +1,168 @@
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #202127;
+  color: #eeeeef;
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+}
+
+button {
+  background: #35363e;
+  color: white;
+  border: 1px solid #484952;
+  border-radius: 4px;
+  padding: 9px 12px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+}
+
+button:hover {
+  background: #50515c;
+}
+
+#topbar {
+  position: fixed;
+  z-index: 10;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 48px;
+  background: #18191e;
+  border-bottom: 1px solid #363740;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 15px;
+}
+
+.brand {
+  font-weight: bold;
+  letter-spacing: 1px;
+  color: #a78bfa;
+}
+
+.top-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.top-actions button {
+  text-align: center;
+}
+
+#toolbar {
+  position: fixed;
+  z-index: 5;
+  top: 48px;
+  left: 0;
+  bottom: 170px;
+  width: 190px;
+  padding: 14px;
+  background: #24252c;
+  border-right: 1px solid #3b3c45;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#toolbar h3,
+#properties h3 {
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #aaaab7;
+  margin: 8px 0;
+}
+
+#toolbar hr,
+#properties hr {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid #41424b;
+  margin: 8px 0;
+}
+
+.danger {
+  background: #682e38;
+}
+
+.danger:hover {
+  background: #91404d;
+}
+
+#properties {
+  position: fixed;
+  z-index: 5;
+  top: 48px;
+  right: 0;
+  bottom: 170px;
+  width: 220px;
+  padding: 14px;
+  background: #24252c;
+  border-left: 1px solid #3b3c45;
+}
+
+#properties p {
+  color: #bdbdc8;
+  margin-top: 20px;
+}
+
+#selected-object {
+  color: #a78bfa;
+  display: block;
+  margin-top: 8px;
+}
+
+#properties small {
+  color: #aaaab7;
+  line-height: 2;
+}
+
+#timeline {
+  position: fixed;
+  z-index: 5;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 170px;
+  background: #24252c;
+  border-top: 1px solid #42434d;
+  padding: 14px 205px;
+}
+
+.timeline-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 25px;
+}
+
+.timeline-header strong {
+  color: #a78bfa;
+  letter-spacing: 1px;
+}
+
+.timeline-header span {
+  color: #bdbdc8;
+}
+
+.timeline-track {
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid #555661;
+  padding-top: 12px;
+}
+
+.frame-marker {
+  color: #aaaab7;
+  font-size: 11px;
+}
+
+canvas {
+  display: block;
+}
