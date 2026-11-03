@@ -1,6 +1,5 @@
 
 import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { createModelingSystem } from "./modeling.js";
 
 // =====================================
@@ -19,7 +18,9 @@ const camera = new THREE.PerspectiveCamera(
   1000
 );
 
+const cameraTarget = new THREE.Vector3(0, 0, 0);
 camera.position.set(5, 5, 7);
+camera.lookAt(cameraTarget);
 
 // RENDERER
 const renderer = new THREE.WebGLRenderer({
@@ -29,6 +30,7 @@ const renderer = new THREE.WebGLRenderer({
 
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -41,29 +43,103 @@ renderer.domElement.style.zIndex = "0";
 document.body.appendChild(renderer.domElement);
 
 // =====================================
-// CAMERA CONTROLS
+// CAMERA SYSTEM
 // =====================================
 
-const orbitControls = new OrbitControls(
-  camera,
-  renderer.domElement
-);
+// OrbitControls are replaced with custom
+// cursor-based camera controls.
 
-orbitControls.enableDamping = true;
-orbitControls.dampingFactor = 0.08;
+const orbitControls = { enabled: false };
 
-orbitControls.enableRotate = true;
-orbitControls.enablePan = true;
-orbitControls.enableZoom = false;
+let cameraTheta = Math.atan2(5, 7);
+let cameraPhi = Math.acos(5 / Math.sqrt(99));
+let cameraDistance = Math.sqrt(99);
 
-orbitControls.rotateSpeed = 0.7;
-orbitControls.panSpeed = 0.7;
+function updateCamera() {
+  cameraPhi = THREE.MathUtils.clamp(
+    cameraPhi,
+    0.05,
+    Math.PI - 0.05
+  );
 
-orbitControls.mouseButtons = {
-  LEFT: THREE.MOUSE.ROTATE,
-  MIDDLE: THREE.MOUSE.PAN,
-  RIGHT: THREE.MOUSE.PAN
-};
+  cameraDistance = THREE.MathUtils.clamp(
+    cameraDistance,
+    1,
+    100
+  );
+
+  camera.position.set(
+    cameraTarget.x +
+      cameraDistance * Math.sin(cameraPhi) * Math.sin(cameraTheta),
+
+    cameraTarget.y +
+      cameraDistance * Math.cos(cameraPhi),
+
+    cameraTarget.z +
+      cameraDistance * Math.sin(cameraPhi) * Math.cos(cameraTheta)
+  );
+
+  camera.lookAt(cameraTarget);
+}
+
+let previousPointer = null;
+
+renderer.domElement.addEventListener("pointermove", (event) => {
+  if (!event.altKey) {
+    previousPointer = null;
+    return;
+  }
+
+  if (!previousPointer) {
+    previousPointer = {
+      x: event.clientX,
+      y: event.clientY
+    };
+    return;
+  }
+
+  const dx = event.clientX - previousPointer.x;
+  const dy = event.clientY - previousPointer.y;
+
+  previousPointer = {
+    x: event.clientX,
+    y: event.clientY
+  };
+
+  // CTRL + ALT = ROTATE CAMERA
+  if (event.ctrlKey) {
+    cameraTheta -= dx * 0.006;
+    cameraPhi -= dy * 0.006;
+
+    updateCamera();
+  }
+
+  // ALT = PAN CAMERA
+  else {
+    const right = new THREE.Vector3();
+    const up = new THREE.Vector3();
+
+    camera.updateMatrixWorld();
+
+    right.setFromMatrixColumn(camera.matrix, 0);
+    up.setFromMatrixColumn(camera.matrix, 1);
+
+    const speed = cameraDistance * 0.0015;
+
+    cameraTarget.addScaledVector(right, -dx * speed);
+    cameraTarget.addScaledVector(up, dy * speed);
+
+    updateCamera();
+  }
+});
+
+renderer.domElement.addEventListener("pointerleave", () => {
+  previousPointer = null;
+});
+
+renderer.domElement.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+});
 
 // =====================================
 // LIGHTING
@@ -107,9 +183,7 @@ const modeling = createModelingSystem({
   orbitControls,
 
   onSelectionChange(object) {
-    const label = document.getElementById(
-      "selected-object"
-    );
+    const label = document.getElementById("selected-object");
 
     if (label) {
       label.textContent = object
@@ -119,28 +193,151 @@ const modeling = createModelingSystem({
   }
 });
 
+// =====================================
+// UNDO AND REDO SYSTEM
+// =====================================
+
+let history = [];
+let historyIndex = -1;
+
+function captureState() {
+  return modeling.getObjects().map(object => ({
+    object,
+    position: object.position.clone(),
+    rotation: object.rotation.clone(),
+    scale: object.scale.clone()
+  }));
+}
+
+function commitHistory() {
+  const state = captureState();
+
+  history = history.slice(0, historyIndex + 1);
+  history.push(state);
+
+  if (history.length > 50) {
+    history.shift();
+  }
+
+  historyIndex = history.length - 1;
+}
+
+function restoreHistory(index) {
+  if (index < 0 || index >= history.length) return;
+
+  modeling.deselectObject();
+
+  // Remove current editor objects
+  modeling.getObjects().forEach(object => {
+    scene.remove(object);
+  });
+
+  // Restore previous objects
+  const state = history[index];
+
+  state.forEach(item => {
+    scene.add(item.object);
+
+    item.object.position.copy(item.position);
+    item.object.rotation.copy(item.rotation);
+    item.object.scale.copy(item.scale);
+  });
+
+  historyIndex = index;
+}
+
+function undo() {
+  if (historyIndex > 0) {
+    restoreHistory(historyIndex - 1);
+  }
+}
+
+function redo() {
+  if (historyIndex < history.length - 1) {
+    restoreHistory(historyIndex + 1);
+  }
+}
+
+// Wrap object creation methods for history
+["addCube", "addSphere", "addCylinder", "addPlane"].forEach(method => {
+  const original = modeling[method];
+
+  modeling[method] = function (...args) {
+    const result = original.apply(modeling, args);
+    commitHistory();
+    return result;
+  };
+});
+
+const originalDelete = modeling.deleteSelected;
+
+modeling.deleteSelected = function () {
+  if (!modeling.getSelected()) return;
+
+  originalDelete.call(modeling);
+  commitHistory();
+};
+
 // STARTING OBJECT
 modeling.addCube();
+
+// =====================================
+// ANIMATION PLAYBACK STATE
+// =====================================
+
+let isPlaying = false;
+
+function togglePlayback() {
+  isPlaying = !isPlaying;
+
+  window.dispatchEvent(
+    new CustomEvent("editor-playback-change", {
+      detail: { isPlaying }
+    })
+  );
+
+  console.log(
+    isPlaying ? "Playback started" : "Playback stopped"
+  );
+}
 
 // =====================================
 // KEYBOARD CONTROLS
 // =====================================
 
-window.addEventListener("keydown", (event) => {
+let transformBefore = null;
 
+window.addEventListener("keydown", (event) => {
   const target = event.target;
 
   if (
     target instanceof HTMLInputElement ||
-    target instanceof HTMLTextAreaElement
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement
   ) return;
+
+  // UNDO
+  if (event.ctrlKey && event.key.toLowerCase() === "z") {
+    event.preventDefault();
+
+    if (!event.repeat) undo();
+    return;
+  }
+
+  // REDO
+  if (event.ctrlKey && event.key.toLowerCase() === "y") {
+    event.preventDefault();
+
+    if (!event.repeat) redo();
+    return;
+  }
 
   // ZOOM IN
   if (event.ctrlKey && event.key === "ArrowUp") {
     event.preventDefault();
 
-    camera.position.multiplyScalar(0.9);
-    orbitControls.update();
+    cameraDistance *= 0.9;
+    updateCamera();
     return;
   }
 
@@ -148,32 +345,56 @@ window.addEventListener("keydown", (event) => {
   if (event.ctrlKey && event.key === "ArrowDown") {
     event.preventDefault();
 
-    camera.position.multiplyScalar(1.1);
-    orbitControls.update();
+    cameraDistance *= 1.1;
+    updateCamera();
     return;
   }
 
+  // DELETE
+  if (event.ctrlKey && event.key === "Backspace") {
+    event.preventDefault();
+
+    if (!event.repeat) modeling.deleteSelected();
+    return;
+  }
+
+  // PLAY / PAUSE
+  if (event.code === "Space") {
+    event.preventDefault();
+
+    if (!event.repeat) togglePlayback();
+    return;
+  }
+
+  if (event.ctrlKey || event.altKey || event.repeat) return;
+
   // TRANSFORM CONTROLS
-  if (event.key.toLowerCase() === "g") {
-    modeling.setMode("move");
-  }
+  if (["g", "r", "s"].includes(event.key.toLowerCase())) {
+    transformBefore = captureState();
 
-  if (event.key.toLowerCase() === "r") {
-    modeling.setMode("rotate");
-  }
+    if (event.key.toLowerCase() === "g") {
+      modeling.setMode("move");
+    }
 
-  if (event.key.toLowerCase() === "s") {
-    modeling.setMode("scale");
-  }
+    if (event.key.toLowerCase() === "r") {
+      modeling.setMode("rotate");
+    }
 
-  // DELETE OBJECT
+    if (event.key.toLowerCase() === "s") {
+      modeling.setMode("scale");
+    }
+  }
+});
+
+// Save completed transformations to history
+window.addEventListener("keyup", (event) => {
   if (
-    event.key === "Delete" ||
-    event.key === "Backspace"
+    transformBefore &&
+    ["g", "r", "s"].includes(event.key.toLowerCase())
   ) {
-    modeling.deleteSelected();
+    commitHistory();
+    transformBefore = null;
   }
-
 });
 
 // =====================================
@@ -181,10 +402,7 @@ window.addEventListener("keydown", (event) => {
 // =====================================
 
 window.addEventListener("resize", () => {
-
-  camera.aspect =
-    window.innerWidth / window.innerHeight;
-
+  camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
 
   renderer.setSize(
@@ -195,7 +413,6 @@ window.addEventListener("resize", () => {
   renderer.setPixelRatio(
     Math.min(window.devicePixelRatio, 1.5)
   );
-
 });
 
 // =====================================
@@ -204,8 +421,6 @@ window.addEventListener("resize", () => {
 
 function animate() {
   requestAnimationFrame(animate);
-
-  orbitControls.update();
 
   renderer.render(scene, camera);
 }
@@ -221,6 +436,9 @@ window.scene = scene;
 window.camera = camera;
 window.renderer = renderer;
 
-console.log(
-  "3D ANIMATION STUDIO INITIALIZED"
-);
+window.editorUndo = undo;
+window.editorRedo = redo;
+
+window.editorIsPlaying = () => isPlaying;
+
+console.log("3D ANIMATION STUDIO INITIALIZED");
