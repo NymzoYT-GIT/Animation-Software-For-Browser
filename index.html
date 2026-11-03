@@ -1,0 +1,93 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Animation Studio</title>
+
+  <link rel="stylesheet" href="css/style.css">
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+
+<body>
+
+  <header id="topbar">
+    <div class="brand">3D ANIMATION STUDIO</div>
+
+    <div class="top-actions">
+      <button id="save-project">Save Project</button>
+      <button id="export-project">Export</button>
+    </div>
+  </header>
+
+  <aside id="toolbar">
+    <h3>CREATE</h3>
+
+    <button onclick="modeling.addCube()">＋ Cube</button>
+    <button onclick="modeling.addSphere()">＋ Sphere</button>
+    <button onclick="modeling.addCylinder()">＋ Cylinder</button>
+    <button onclick="modeling.addPlane()">＋ Plane</button>
+
+    <hr>
+
+    <h3>TRANSFORM</h3>
+
+    <button onclick="modeling.setMode('move')">Move (G)</button>
+    <button onclick="modeling.setMode('rotate')">Rotate (R)</button>
+    <button onclick="modeling.setMode('scale')">Scale (S)</button>
+
+    <hr>
+
+    <button onclick="modeling.deleteSelected()" class="danger">
+      Delete Object
+    </button>
+  </aside>
+
+  <aside id="properties">
+    <h3>PROPERTIES</h3>
+
+    <p>Selected Object:</p>
+    <strong id="selected-object">Nothing selected</strong>
+
+    <hr>
+
+    <p>Viewport Controls</p>
+    <small>
+      Left click: Select object (double-click)<br>
+      Right click: Rotate view<br>
+      Scroll: Zoom<br>
+      G: Move<br>
+      R: Rotate<br>
+      S: Scale
+    </small>
+  </aside>
+
+  <section id="timeline">
+    <div class="timeline-header">
+      <strong>TIMELINE</strong>
+      <span>Frame 1</span>
+    </div>
+
+    <div class="timeline-track">
+      <div class="frame-marker">1</div>
+      <div class="frame-marker">10</div>
+      <div class="frame-marker">20</div>
+      <div class="frame-marker">30</div>
+      <div class="frame-marker">40</div>
+      <div class="frame-marker">50</div>
+    </div>
+  </section>
+
+  <script type="module" src="js/main.js"></script>
+
+</body>
+</html>
