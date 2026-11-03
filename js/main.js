@@ -3,11 +3,15 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { createModelingSystem } from "./modeling.js";
 
-// Scene
+// =====================================
+// 3D ANIMATION STUDIO
+// =====================================
+
+// SCENE
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#202127");
 
-// Camera
+// CAMERA
 const camera = new THREE.PerspectiveCamera(
   50,
   window.innerWidth / window.innerHeight,
@@ -17,18 +21,16 @@ const camera = new THREE.PerspectiveCamera(
 
 camera.position.set(5, 5, 7);
 
-// Renderer
+// RENDERER
 const renderer = new THREE.WebGLRenderer({
   antialias: true,
   powerPreference: "high-performance"
 });
 
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
-document.body.appendChild(renderer.domElement);
 
 renderer.domElement.style.position = "fixed";
 renderer.domElement.style.inset = "0";
@@ -36,80 +38,189 @@ renderer.domElement.style.width = "100%";
 renderer.domElement.style.height = "100%";
 renderer.domElement.style.zIndex = "0";
 
-// Camera controls
+document.body.appendChild(renderer.domElement);
+
+// =====================================
+// CAMERA CONTROLS
+// =====================================
+
 const orbitControls = new OrbitControls(
   camera,
   renderer.domElement
 );
 
 orbitControls.enableDamping = true;
+orbitControls.dampingFactor = 0.08;
 
-// Lighting
-const ambient = new THREE.AmbientLight("#ffffff", 1.5);
-scene.add(ambient);
+orbitControls.enableRotate = true;
+orbitControls.enablePan = true;
+orbitControls.enableZoom = false;
 
-const sunlight = new THREE.DirectionalLight("#ffffff", 3);
+orbitControls.rotateSpeed = 0.7;
+orbitControls.panSpeed = 0.7;
+
+orbitControls.mouseButtons = {
+  LEFT: THREE.MOUSE.ROTATE,
+  MIDDLE: THREE.MOUSE.PAN,
+  RIGHT: THREE.MOUSE.PAN
+};
+
+// =====================================
+// LIGHTING
+// =====================================
+
+scene.add(
+  new THREE.AmbientLight("#ffffff", 1.5)
+);
+
+const sunlight = new THREE.DirectionalLight(
+  "#ffffff",
+  3
+);
+
 sunlight.position.set(5, 10, 5);
 sunlight.castShadow = true;
+
 scene.add(sunlight);
 
-// Grid
-const grid = new THREE.GridHelper(20, 20, "#777777", "#444444");
+// =====================================
+// GRID
+// =====================================
+
+const grid = new THREE.GridHelper(
+  20,
+  20,
+  "#777777",
+  "#444444"
+);
+
 scene.add(grid);
 
-// Modeling system
+// =====================================
+// MODELING SYSTEM
+// =====================================
+
 const modeling = createModelingSystem({
   scene,
   camera,
   renderer,
   orbitControls,
+
   onSelectionChange(object) {
-    const label = document.getElementById("selected-object");
+    const label = document.getElementById(
+      "selected-object"
+    );
 
     if (label) {
-      label.textContent = object ? object.name : "Nothing selected";
+      label.textContent = object
+        ? object.name
+        : "Nothing selected";
     }
   }
 });
 
-// Create starting cube
+// STARTING OBJECT
 modeling.addCube();
 
-// Animation loop
+// =====================================
+// KEYBOARD CONTROLS
+// =====================================
+
+window.addEventListener("keydown", (event) => {
+
+  const target = event.target;
+
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement
+  ) return;
+
+  // ZOOM IN
+  if (event.ctrlKey && event.key === "ArrowUp") {
+    event.preventDefault();
+
+    camera.position.multiplyScalar(0.9);
+    orbitControls.update();
+    return;
+  }
+
+  // ZOOM OUT
+  if (event.ctrlKey && event.key === "ArrowDown") {
+    event.preventDefault();
+
+    camera.position.multiplyScalar(1.1);
+    orbitControls.update();
+    return;
+  }
+
+  // TRANSFORM CONTROLS
+  if (event.key.toLowerCase() === "g") {
+    modeling.setMode("move");
+  }
+
+  if (event.key.toLowerCase() === "r") {
+    modeling.setMode("rotate");
+  }
+
+  if (event.key.toLowerCase() === "s") {
+    modeling.setMode("scale");
+  }
+
+  // DELETE OBJECT
+  if (
+    event.key === "Delete" ||
+    event.key === "Backspace"
+  ) {
+    modeling.deleteSelected();
+  }
+
+});
+
+// =====================================
+// WINDOW RESIZING
+// =====================================
+
+window.addEventListener("resize", () => {
+
+  camera.aspect =
+    window.innerWidth / window.innerHeight;
+
+  camera.updateProjectionMatrix();
+
+  renderer.setSize(
+    window.innerWidth,
+    window.innerHeight
+  );
+
+  renderer.setPixelRatio(
+    Math.min(window.devicePixelRatio, 1.5)
+  );
+
+});
+
+// =====================================
+// ANIMATION LOOP
+// =====================================
+
 function animate() {
   requestAnimationFrame(animate);
 
   orbitControls.update();
+
   renderer.render(scene, camera);
 }
 
 animate();
 
-// Window resizing
-window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
+// =====================================
+// GLOBAL EDITOR ACCESS
+// =====================================
 
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
-
-// Keyboard shortcuts
-window.addEventListener("keydown", (event) => {
-  if (
-    event.target instanceof HTMLInputElement ||
-    event.target instanceof HTMLTextAreaElement
-  ) return;
-
-  if (event.key.toLowerCase() === "g") modeling.setMode("move");
-  if (event.key.toLowerCase() === "r") modeling.setMode("rotate");
-  if (event.key.toLowerCase() === "s") modeling.setMode("scale");
-
-  if (event.key === "Delete" || event.key === "Backspace") {
-    modeling.deleteSelected();
-  }
-});
-
-// Make available to editor interface
 window.modeling = modeling;
+window.scene = scene;
+window.camera = camera;
+window.renderer = renderer;
 
-console.log("3D Animation Studio modeling engine loaded!");
+console.log(
+  "3D ANIMATION STUDIO INITIALIZED"
+);
