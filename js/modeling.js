@@ -24,7 +24,7 @@ export function createModelingSystem({
 
   scene.add(transformControls.getHelper());
 
-  transformControls.addEventListener("dragging-changed", (event) => {
+  transformControls.addEventListener("dragging-changed", event => {
     if (orbitControls) orbitControls.enabled = !event.value;
 
     if (event.value) {
@@ -53,8 +53,34 @@ export function createModelingSystem({
       crypto.randomUUID?.() ||
       `object-${Date.now()}-${objectCounter}`;
 
-    object.castShadow = true;
-    object.receiveShadow = true;
+    object.traverse(child => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+
+    scene.add(object);
+    objectCounter++;
+
+    selectObject(object);
+
+    return object;
+  }
+
+  function addImportedObject(object, name) {
+    object.name = name || `Imported_${objectCounter}`;
+    object.userData.editorObject = true;
+    object.userData.objectId =
+      crypto.randomUUID?.() ||
+      `object-${Date.now()}-${objectCounter}`;
+
+    object.traverse(child => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
 
     scene.add(object);
     objectCounter++;
@@ -116,14 +142,10 @@ export function createModelingSystem({
 
   function deselectObject() {
     selectedObject = null;
-
     transformControls.detach();
-
     onSelectionChange(null);
   }
 
-  // Do not dispose geometry or materials here.
-  // History needs them to remain available for Undo.
   function deleteSelected() {
     if (!selectedObject) return null;
 
@@ -147,6 +169,20 @@ export function createModelingSystem({
     }
   }
 
+  function findEditorRoot(object) {
+    let current = object;
+
+    while (current && current !== scene) {
+      if (current.userData?.editorObject) {
+        return current;
+      }
+
+      current = current.parent;
+    }
+
+    return null;
+  }
+
   function selectAtPointer(event) {
     const rect = renderer.domElement.getBoundingClientRect();
 
@@ -158,24 +194,29 @@ export function createModelingSystem({
 
     raycaster.setFromCamera(pointer, camera);
 
-    const objects = [];
+    const meshes = [];
 
-    scene.traverse((child) => {
+    scene.traverse(child => {
       if (
         child.isMesh &&
-        child.userData.editorObject
+        findEditorRoot(child)
       ) {
-        objects.push(child);
+        meshes.push(child);
       }
     });
 
-    const hits = raycaster.intersectObjects(objects, false);
+    const hits = raycaster.intersectObjects(meshes, false);
 
     if (hits.length > 0) {
-      selectObject(hits[0].object);
-    } else {
-      deselectObject();
+      const root = findEditorRoot(hits[0].object);
+
+      if (root) {
+        selectObject(root);
+        return;
+      }
     }
+
+    deselectObject();
   }
 
   renderer.domElement.addEventListener(
@@ -188,6 +229,7 @@ export function createModelingSystem({
     addSphere,
     addCylinder,
     addPlane,
+    addImportedObject,
 
     selectObject,
     deselectObject,
