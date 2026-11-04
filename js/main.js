@@ -130,6 +130,101 @@ const grid = new THREE.GridHelper(
 );
 scene.add(grid);
 
+// HIERARCHY ELEMENTS
+const objectList = document.getElementById("object-list");
+const selectedLabel = document.getElementById("selected-object");
+const nameInput = document.getElementById("object-name");
+const renameButton = document.getElementById("rename-object");
+
+let modeling = null;
+
+// UPDATE SCENE HIERARCHY
+function updateHierarchy() {
+  if (!modeling || !objectList) return;
+
+  const objects = modeling.getObjects();
+  const selected = modeling.getSelected();
+
+  objectList.replaceChildren();
+
+  if (objects.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty-list";
+    empty.textContent = "No objects";
+    objectList.appendChild(empty);
+  }
+
+  objects.forEach((object) => {
+    const row = document.createElement("button");
+
+    row.type = "button";
+    row.className = "object-row";
+    row.textContent = "◇  " + object.name;
+
+    row.classList.toggle(
+      "selected",
+      object === selected
+    );
+
+    row.setAttribute(
+      "aria-pressed",
+      object === selected ? "true" : "false"
+    );
+
+    row.addEventListener("click", () => {
+      modeling.selectObject(object);
+    });
+
+    objectList.appendChild(row);
+  });
+
+  if (selectedLabel) {
+    selectedLabel.textContent = selected
+      ? selected.name
+      : "Nothing selected";
+  }
+
+  if (nameInput) {
+    nameInput.value = selected ? selected.name : "";
+    nameInput.disabled = !selected;
+  }
+
+  if (renameButton) {
+    renameButton.disabled = !selected;
+  }
+}
+
+// RENAME OBJECT
+function renameSelectedObject() {
+  const selected = modeling?.getSelected();
+
+  if (!selected || !nameInput) return;
+
+  const newName = nameInput.value.trim();
+
+  if (!newName) return;
+
+  selected.name = newName;
+
+  updateHierarchy();
+}
+
+if (renameButton) {
+  renameButton.addEventListener(
+    "click",
+    renameSelectedObject
+  );
+}
+
+if (nameInput) {
+  nameInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      renameSelectedObject();
+      nameInput.blur();
+    }
+  });
+}
+
 // HISTORY SYSTEM
 let history = [];
 let historyIndex = -1;
@@ -177,6 +272,7 @@ function restoreHistory(index) {
   });
 
   historyIndex = index;
+  updateHierarchy();
 }
 
 function undo() {
@@ -191,21 +287,15 @@ function redo() {
   }
 }
 
-// MODELING
-const modeling = createModelingSystem({
+// MODELING SYSTEM
+modeling = createModelingSystem({
   scene,
   camera,
   renderer,
   orbitControls,
 
-  onSelectionChange(object) {
-    const label = document.getElementById("selected-object");
-
-    if (label) {
-      label.textContent = object
-        ? object.name
-        : "Nothing selected";
-    }
+  onSelectionChange() {
+    updateHierarchy();
   },
 
   onTransformStart() {
@@ -226,7 +316,10 @@ const modeling = createModelingSystem({
 
   modeling[method] = function(...args) {
     const result = original.apply(modeling, args);
+
     commitHistory();
+    updateHierarchy();
+
     return result;
   };
 });
@@ -238,7 +331,9 @@ modeling.deleteSelected = function() {
   if (!modeling.getSelected()) return;
 
   originalDelete.call(modeling);
+
   commitHistory();
+  updateHierarchy();
 };
 
 // STARTER OBJECT
@@ -261,7 +356,7 @@ function togglePlayback() {
   );
 }
 
-// KEYBOARD
+// KEYBOARD CONTROLS
 window.addEventListener("keydown", (event) => {
   const target = event.target;
 
@@ -312,17 +407,11 @@ window.addEventListener("keydown", (event) => {
   if (event.ctrlKey || event.altKey || event.repeat) return;
 
   if (["g", "r", "s"].includes(event.key.toLowerCase())) {
-    if (event.key.toLowerCase() === "g") {
-      modeling.setMode("move");
-    }
+    const key = event.key.toLowerCase();
 
-    if (event.key.toLowerCase() === "r") {
-      modeling.setMode("rotate");
-    }
-
-    if (event.key.toLowerCase() === "s") {
-      modeling.setMode("scale");
-    }
+    if (key === "g") modeling.setMode("move");
+    if (key === "r") modeling.setMode("rotate");
+    if (key === "s") modeling.setMode("scale");
   }
 });
 
