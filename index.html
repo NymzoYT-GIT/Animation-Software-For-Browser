@@ -41,9 +41,7 @@
 
   <h3>IMPORT</h3>
 
-  <button id="import-model-button">
-    ＋ Import 3D Model
-  </button>
+  <button id="import-model-button">＋ Import 3D Model</button>
 
   <input
     type="file"
@@ -127,17 +125,54 @@
 <section id="timeline">
 
   <div class="timeline-header">
+
     <strong>TIMELINE</strong>
-    <span>Frame 1</span>
+
+    <div class="timeline-controls">
+
+      <button id="previous-frame">◀</button>
+
+      <span id="current-frame">Frame 1</span>
+
+      <button id="next-frame">▶</button>
+
+      <button id="add-keyframe">＋ Keyframe</button>
+
+      <button id="play-animation">▶ Play</button>
+
+    </div>
+
   </div>
 
-  <div class="timeline-track">
-    <div class="frame-marker">1</div>
-    <div class="frame-marker">10</div>
-    <div class="frame-marker">20</div>
-    <div class="frame-marker">30</div>
-    <div class="frame-marker">40</div>
-    <div class="frame-marker">50</div>
+  <div class="timeline-settings">
+
+    <label>
+      Start
+      <input id="start-frame" type="number" value="1" min="1">
+    </label>
+
+    <label>
+      End
+      <input id="end-frame" type="number" value="120" min="1">
+    </label>
+
+    <label>
+      FPS
+      <input id="animation-fps" type="number" value="24" min="1" max="120">
+    </label>
+
+  </div>
+
+  <div id="timeline-track" class="timeline-track">
+
+    <div class="frame-marker" data-frame="1">1</div>
+    <div class="frame-marker" data-frame="20">20</div>
+    <div class="frame-marker" data-frame="40">40</div>
+    <div class="frame-marker" data-frame="60">60</div>
+    <div class="frame-marker" data-frame="80">80</div>
+    <div class="frame-marker" data-frame="100">100</div>
+    <div class="frame-marker" data-frame="120">120</div>
+
   </div>
 
 </section>
