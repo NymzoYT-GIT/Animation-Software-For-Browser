@@ -2,6 +2,15 @@
 import * as THREE from "three";
 import { createModelingSystem } from "./modeling.js";
 
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
+import { STLLoader } from "three/addons/loaders/STLLoader.js";
+import { ColladaLoader } from "three/addons/loaders/ColladaLoader.js";
+import { PLYLoader } from "three/addons/loaders/PLYLoader.js";
+import { ThreeMFLoader } from "three/addons/loaders/3MFLoader.js";
+import { USDZLoader } from "three/addons/loaders/USDZLoader.js";
+
 // SCENE
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#202127");
@@ -37,7 +46,7 @@ renderer.domElement.style.zIndex = "0";
 
 document.body.appendChild(renderer.domElement);
 
-// CAMERA SYSTEM
+// CAMERA CONTROLS
 const orbitControls = { enabled: false };
 
 let cameraTheta = Math.atan2(5, 7);
@@ -112,7 +121,7 @@ renderer.domElement.addEventListener("pointerleave", () => {
   previousPointer = null;
 });
 
-renderer.domElement.addEventListener("contextmenu", (event) => {
+renderer.domElement.addEventListener("contextmenu", event => {
   event.preventDefault();
 });
 
@@ -130,7 +139,7 @@ const grid = new THREE.GridHelper(
 );
 scene.add(grid);
 
-// HIERARCHY ELEMENTS
+// HIERARCHY
 const objectList = document.getElementById("object-list");
 const selectedLabel = document.getElementById("selected-object");
 const nameInput = document.getElementById("object-name");
@@ -138,7 +147,6 @@ const renameButton = document.getElementById("rename-object");
 
 let modeling = null;
 
-// UPDATE SCENE HIERARCHY
 function updateHierarchy() {
   if (!modeling || !objectList) return;
 
@@ -154,22 +162,14 @@ function updateHierarchy() {
     objectList.appendChild(empty);
   }
 
-  objects.forEach((object) => {
+  objects.forEach(object => {
     const row = document.createElement("button");
 
     row.type = "button";
     row.className = "object-row";
     row.textContent = "◇  " + object.name;
 
-    row.classList.toggle(
-      "selected",
-      object === selected
-    );
-
-    row.setAttribute(
-      "aria-pressed",
-      object === selected ? "true" : "false"
-    );
+    row.classList.toggle("selected", object === selected);
 
     row.addEventListener("click", () => {
       modeling.selectObject(object);
@@ -194,38 +194,28 @@ function updateHierarchy() {
   }
 }
 
-// RENAME OBJECT
-function renameSelectedObject() {
-  const selected = modeling?.getSelected();
-
-  if (!selected || !nameInput) return;
-
-  const newName = nameInput.value.trim();
-
-  if (!newName) return;
-
-  selected.name = newName;
-
-  updateHierarchy();
-}
-
 if (renameButton) {
-  renameButton.addEventListener(
-    "click",
-    renameSelectedObject
-  );
+  renameButton.addEventListener("click", () => {
+    const selected = modeling?.getSelected();
+    const name = nameInput.value.trim();
+
+    if (!selected || !name) return;
+
+    selected.name = name;
+    updateHierarchy();
+  });
 }
 
 if (nameInput) {
-  nameInput.addEventListener("keydown", (event) => {
+  nameInput.addEventListener("keydown", event => {
     if (event.key === "Enter") {
-      renameSelectedObject();
+      renameButton.click();
       nameInput.blur();
     }
   });
 }
 
-// HISTORY SYSTEM
+// HISTORY
 let history = [];
 let historyIndex = -1;
 let transformDragBefore = null;
@@ -245,9 +235,7 @@ function commitHistory() {
   history = history.slice(0, historyIndex + 1);
   history.push(state);
 
-  if (history.length > 50) {
-    history.shift();
-  }
+  if (history.length > 50) history.shift();
 
   historyIndex = history.length - 1;
 }
@@ -261,11 +249,8 @@ function restoreHistory(index) {
     scene.remove(object);
   });
 
-  const state = history[index];
-
-  state.forEach(item => {
+  history[index].forEach(item => {
     scene.add(item.object);
-
     item.object.position.copy(item.position);
     item.object.rotation.copy(item.rotation);
     item.object.scale.copy(item.scale);
@@ -276,9 +261,7 @@ function restoreHistory(index) {
 }
 
 function undo() {
-  if (historyIndex > 0) {
-    restoreHistory(historyIndex - 1);
-  }
+  if (historyIndex > 0) restoreHistory(historyIndex - 1);
 }
 
 function redo() {
@@ -287,7 +270,7 @@ function redo() {
   }
 }
 
-// MODELING SYSTEM
+// MODELING
 modeling = createModelingSystem({
   scene,
   camera,
@@ -310,34 +293,245 @@ modeling = createModelingSystem({
   }
 });
 
-// TRACK OBJECT CREATION
 ["addCube", "addSphere", "addCylinder", "addPlane"].forEach(method => {
   const original = modeling[method];
 
   modeling[method] = function(...args) {
     const result = original.apply(modeling, args);
-
     commitHistory();
     updateHierarchy();
-
     return result;
   };
 });
 
-// TRACK OBJECT DELETION
 const originalDelete = modeling.deleteSelected;
 
 modeling.deleteSelected = function() {
   if (!modeling.getSelected()) return;
 
   originalDelete.call(modeling);
-
   commitHistory();
   updateHierarchy();
 };
 
 // STARTER OBJECT
 modeling.addCube();
+
+// UNIVERSAL MODEL IMPORTER
+const importButton = document.getElementById("import-model-button");
+const fileInput = document.getElementById("model-file-input");
+
+function createLoadingManager(files) {
+  const manager = new THREE.LoadingManager();
+  const fileURLs = new Map();
+
+  files.forEach(file => {
+    fileURLs.set(file.name.toLowerCase(), URL.createObjectURL(file));
+  });
+
+  manager.setURLModifier(url => {
+    const cleanURL = decodeURIComponent(
+      url.split("?")[0].split("#")[0]
+    );
+
+    const filename = cleanURL.split("/").pop().toLowerCase();
+
+    return fileURLs.get(filename) || url;
+  });
+
+  return {
+    manager,
+    cleanup() {
+      fileURLs.forEach(url => URL.revokeObjectURL(url));
+    }
+  };
+}
+
+function addImportedModel(object, filename) {
+  const wrapper = new THREE.Group();
+
+  wrapper.name = filename.replace(/\.[^/.]+$/, "");
+  wrapper.userData.editorObject = true;
+  wrapper.userData.objectId = crypto.randomUUID();
+
+  wrapper.add(object);
+
+  wrapper.traverse(child => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+      child.userData.editorObject = true;
+    }
+  });
+
+  scene.add(wrapper);
+
+  wrapper.updateMatrixWorld(true);
+
+  const box = new THREE.Box3().setFromObject(wrapper);
+
+  if (!box.isEmpty()) {
+    const center = box.getCenter(new THREE.Vector3());
+
+    wrapper.position.sub(center);
+
+    const size = box.getSize(new THREE.Vector3());
+    const maxDimension = Math.max(size.x, size.y, size.z);
+
+    if (maxDimension > 0) {
+      const factor = 3 / maxDimension;
+      wrapper.scale.setScalar(factor);
+    }
+  }
+
+  modeling.selectObject(wrapper);
+  commitHistory();
+  updateHierarchy();
+
+  console.log("Imported model:", filename);
+}
+
+async function loadModel(file, files) {
+  const extension = file.name.split(".").pop().toLowerCase();
+  const managerData = createLoadingManager(files);
+  const manager = managerData.manager;
+
+  try {
+    const buffer = await file.arrayBuffer();
+    const text = new TextDecoder().decode(buffer);
+
+    let object;
+
+    switch (extension) {
+      case "glb":
+      case "gltf": {
+        const loader = new GLTFLoader(manager);
+
+        const gltf = await new Promise((resolve, reject) => {
+          loader.parse(
+            buffer,
+            "",
+            resolve,
+            reject
+          );
+        });
+
+        object = gltf.scene;
+        break;
+      }
+
+      case "obj": {
+        const loader = new OBJLoader(manager);
+        object = loader.parse(text);
+        break;
+      }
+
+      case "fbx": {
+        const loader = new FBXLoader(manager);
+        object = loader.parse(buffer, "");
+        break;
+      }
+
+      case "stl": {
+        const loader = new STLLoader(manager);
+        const geometry = loader.parse(buffer);
+
+        object = new THREE.Mesh(
+          geometry,
+          new THREE.MeshStandardMaterial({
+            color: "#b5b5c5",
+            roughness: 0.6
+          })
+        );
+        break;
+      }
+
+      case "dae": {
+        const loader = new ColladaLoader(manager);
+        const result = loader.parse(text, "");
+        object = result.scene;
+        break;
+      }
+
+      case "ply": {
+        const loader = new PLYLoader(manager);
+        const geometry = loader.parse(buffer);
+
+        if (geometry.hasAttribute("color")) {
+          geometry.computeVertexNormals();
+
+          object = new THREE.Mesh(
+            geometry,
+            new THREE.MeshStandardMaterial({
+              vertexColors: true,
+              roughness: 0.7
+            })
+          );
+        } else {
+          geometry.computeVertexNormals();
+
+          object = new THREE.Mesh(
+            geometry,
+            new THREE.MeshStandardMaterial({
+              color: "#b5b5c5",
+              roughness: 0.7
+            })
+          );
+        }
+        break;
+      }
+
+      case "3mf": {
+        const loader = new ThreeMFLoader(manager);
+        object = loader.parse(buffer);
+        break;
+      }
+
+      case "usdz": {
+        const loader = new USDZLoader(manager);
+        object = loader.parse(buffer);
+        break;
+      }
+
+      default:
+        throw new Error("Unsupported model format: " + extension);
+    }
+
+    if (!object) {
+      throw new Error("The model did not contain a usable scene.");
+    }
+
+    addImportedModel(object, file.name);
+
+  } catch (error) {
+    console.error("Model import failed:", error);
+
+    alert(
+      "Could not import " + file.name +
+      ". Check the file format and any required companion files."
+    );
+  } finally {
+    managerData.cleanup();
+  }
+}
+
+if (importButton && fileInput) {
+  importButton.addEventListener("click", () => {
+    fileInput.click();
+  });
+
+  fileInput.addEventListener("change", async () => {
+    const files = Array.from(fileInput.files || []);
+
+    if (!files.length) return;
+
+    for (const file of files) {
+      await loadModel(file, files);
+    }
+
+    fileInput.value = "";
+  });
+}
 
 // PLAYBACK STATE
 let isPlaying = false;
@@ -351,13 +545,11 @@ function togglePlayback() {
     })
   );
 
-  console.log(
-    isPlaying ? "Playback started" : "Playback stopped"
-  );
+  console.log(isPlaying ? "Playback started" : "Playback stopped");
 }
 
-// KEYBOARD CONTROLS
-window.addEventListener("keydown", (event) => {
+// KEYBOARD
+window.addEventListener("keydown", event => {
   const target = event.target;
 
   if (
@@ -406,13 +598,11 @@ window.addEventListener("keydown", (event) => {
 
   if (event.ctrlKey || event.altKey || event.repeat) return;
 
-  if (["g", "r", "s"].includes(event.key.toLowerCase())) {
-    const key = event.key.toLowerCase();
+  const key = event.key.toLowerCase();
 
-    if (key === "g") modeling.setMode("move");
-    if (key === "r") modeling.setMode("rotate");
-    if (key === "s") modeling.setMode("scale");
-  }
+  if (key === "g") modeling.setMode("move");
+  if (key === "r") modeling.setMode("rotate");
+  if (key === "s") modeling.setMode("scale");
 });
 
 // RESIZE
@@ -424,7 +614,7 @@ window.addEventListener("resize", () => {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 });
 
-// RENDER LOOP
+// RENDER
 function animate() {
   requestAnimationFrame(animate);
   renderer.render(scene, camera);
