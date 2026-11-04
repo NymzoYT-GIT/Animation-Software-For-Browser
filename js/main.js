@@ -11,7 +11,10 @@ import { PLYLoader } from "three/addons/loaders/PLYLoader.js";
 import { ThreeMFLoader } from "three/addons/loaders/3MFLoader.js";
 import { USDZLoader } from "three/addons/loaders/USDZLoader.js";
 
+// ==========================================
 // SCENE
+// ==========================================
+
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#202127");
 
@@ -46,7 +49,10 @@ renderer.domElement.style.zIndex = "0";
 
 document.body.appendChild(renderer.domElement);
 
+// ==========================================
 // CAMERA CONTROLS
+// ==========================================
+
 const orbitControls = { enabled: false };
 
 let cameraTheta = Math.atan2(5, 7);
@@ -67,9 +73,12 @@ function updateCamera() {
   );
 
   camera.position.set(
-    cameraTarget.x + cameraDistance * Math.sin(cameraPhi) * Math.sin(cameraTheta),
-    cameraTarget.y + cameraDistance * Math.cos(cameraPhi),
-    cameraTarget.z + cameraDistance * Math.sin(cameraPhi) * Math.cos(cameraTheta)
+    cameraTarget.x +
+      cameraDistance * Math.sin(cameraPhi) * Math.sin(cameraTheta),
+    cameraTarget.y +
+      cameraDistance * Math.cos(cameraPhi),
+    cameraTarget.z +
+      cameraDistance * Math.sin(cameraPhi) * Math.cos(cameraTheta)
   );
 
   camera.lookAt(cameraTarget);
@@ -129,7 +138,10 @@ renderer.domElement.addEventListener("contextmenu", event => {
   event.preventDefault();
 });
 
+// ==========================================
 // LIGHTING
+// ==========================================
+
 scene.add(new THREE.AmbientLight("#ffffff", 1.5));
 
 const sunlight = new THREE.DirectionalLight("#ffffff", 3);
@@ -147,7 +159,10 @@ const grid = new THREE.GridHelper(
 
 scene.add(grid);
 
+// ==========================================
 // HIERARCHY
+// ==========================================
+
 const objectList = document.getElementById("object-list");
 const selectedLabel = document.getElementById("selected-object");
 const nameInput = document.getElementById("object-name");
@@ -224,7 +239,10 @@ if (nameInput) {
   });
 }
 
-// HISTORY
+// ==========================================
+// HISTORY / UNDO / REDO
+// ==========================================
+
 let history = [];
 let historyIndex = -1;
 let transformDragBefore = null;
@@ -281,7 +299,10 @@ function redo() {
   }
 }
 
+// ==========================================
 // MODELING SYSTEM
+// ==========================================
+
 modeling = createModelingSystem({
   scene,
   camera,
@@ -330,11 +351,13 @@ modeling.deleteSelected = function() {
 // STARTER OBJECT
 modeling.addCube();
 
+// ==========================================
 // MODEL IMPORTER
+// ==========================================
+
 const importButton = document.getElementById("import-model-button");
 const fileInput = document.getElementById("model-file-input");
 
-// FILE MANAGER
 function createLoadingManager(files) {
   const manager = new THREE.LoadingManager();
   const fileURLs = new Map();
@@ -499,15 +522,11 @@ async function loadModel(file, files) {
       }
 
       default:
-        throw new Error(
-          "Unsupported model format: " + extension
-        );
+        throw new Error("Unsupported model format: " + extension);
     }
 
     if (!object) {
-      throw new Error(
-        "The model did not contain a usable scene."
-      );
+      throw new Error("The model did not contain a usable scene.");
     }
 
     addImportedModel(object, file.name);
@@ -544,24 +563,413 @@ if (importButton && fileInput) {
   });
 }
 
-// PLAYBACK STATE
-let isPlaying = false;
+// ==========================================
+// ANIMATION ENGINE
+// ==========================================
 
-function togglePlayback() {
-  isPlaying = !isPlaying;
+// Each object gets its own collection of keyframes.
+const animationData = new Map();
+
+let currentFrame = 1;
+let isPlaying = false;
+let lastPlaybackTime = 0;
+let playbackAccumulator = 0;
+
+const currentFrameDisplay = document.getElementById("current-frame");
+const previousFrameButton = document.getElementById("previous-frame");
+const nextFrameButton = document.getElementById("next-frame");
+const addKeyframeButton = document.getElementById("add-keyframe");
+const playButton = document.getElementById("play-animation");
+const startFrameInput = document.getElementById("start-frame");
+const endFrameInput = document.getElementById("end-frame");
+const fpsInput = document.getElementById("animation-fps");
+const timelineTrack = document.getElementById("timeline-track");
+
+function getStartFrame() {
+  return Math.max(1, Number(startFrameInput?.value) || 1);
+}
+
+function getEndFrame() {
+  return Math.max(
+    getStartFrame(),
+    Number(endFrameInput?.value) || 120
+  );
+}
+
+function getFPS() {
+  return THREE.MathUtils.clamp(
+    Number(fpsInput?.value) || 24,
+    1,
+    120
+  );
+}
+
+// Save an object's transform at the current frame.
+function addKeyframe() {
+  const object = modeling.getSelected();
+
+  if (!object) {
+    console.log("Select an object before adding a keyframe.");
+    return;
+  }
+
+  if (!animationData.has(object)) {
+    animationData.set(object, new Map());
+  }
+
+  const objectFrames = animationData.get(object);
+
+  objectFrames.set(currentFrame, {
+    position: object.position.clone(),
+    rotation: object.rotation.clone(),
+    scale: object.scale.clone()
+  });
+
+  updateKeyframeDisplay();
+
+  console.log(
+    "Keyframe added:",
+    object.name,
+    "Frame:",
+    currentFrame
+  );
+}
+
+// Interpolate between two values.
+function interpolateVector(a, b, amount) {
+  return a.clone().lerp(b, amount);
+}
+
+function interpolateRotation(a, b, amount) {
+  return new THREE.Euler(
+    THREE.MathUtils.lerp(a.x, b.x, amount),
+    THREE.MathUtils.lerp(a.y, b.y, amount),
+    THREE.MathUtils.lerp(a.z, b.z, amount),
+    a.order
+  );
+}
+
+// Apply the animation at a particular frame.
+function applyAnimationFrame(frame) {
+  animationData.forEach((frames, object) => {
+    if (!object.parent) return;
+
+    const sortedFrames = Array.from(frames.keys()).sort(
+      (a, b) => a - b
+    );
+
+    if (sortedFrames.length === 0) return;
+
+    let before = sortedFrames[0];
+    let after = sortedFrames[sortedFrames.length - 1];
+
+    for (const key of sortedFrames) {
+      if (key <= frame) before = key;
+      if (key >= frame) {
+        after = key;
+        break;
+      }
+    }
+
+    const first = frames.get(before);
+    const second = frames.get(after);
+
+    let amount = 0;
+
+    if (before !== after) {
+      amount = (frame - before) / (after - before);
+    }
+
+    object.position.copy(
+      interpolateVector(first.position, second.position, amount)
+    );
+
+    object.rotation.copy(
+      interpolateRotation(first.rotation, second.rotation, amount)
+    );
+
+    object.scale.copy(
+      interpolateVector(first.scale, second.scale, amount)
+    );
+  });
+}
+
+// Update the frame display.
+function updateFrameDisplay() {
+  if (currentFrameDisplay) {
+    currentFrameDisplay.textContent = "Frame " + currentFrame;
+  }
+
+  if (timelineTrack) {
+    timelineTrack.dataset.currentFrame = currentFrame;
+  }
+
+  updatePlayhead();
+}
+
+// Change the current frame.
+function setCurrentFrame(frame) {
+  currentFrame = THREE.MathUtils.clamp(
+    Math.round(frame),
+    getStartFrame(),
+    getEndFrame()
+  );
+
+  applyAnimationFrame(currentFrame);
+  updateFrameDisplay();
+}
+
+function previousFrame() {
+  stopPlayback();
+  setCurrentFrame(currentFrame - 1);
+}
+
+function nextFrame() {
+  stopPlayback();
+  setCurrentFrame(currentFrame + 1);
+}
+
+// ==========================================
+// TIMELINE VISUALS
+// ==========================================
+
+function updatePlayhead() {
+  if (!timelineTrack) return;
+
+  const oldPlayhead = timelineTrack.querySelector(".timeline-playhead");
+
+  if (oldPlayhead) oldPlayhead.remove();
+
+  const playhead = document.createElement("div");
+
+  playhead.className = "timeline-playhead";
+
+  const start = getStartFrame();
+  const end = getEndFrame();
+  const percentage = end === start
+    ? 0
+    : ((currentFrame - start) / (end - start)) * 100;
+
+  playhead.style.position = "absolute";
+  playhead.style.left = percentage + "%";
+  playhead.style.top = "-2px";
+  playhead.style.bottom = "0";
+  playhead.style.width = "2px";
+  playhead.style.background = "#ffb347";
+  playhead.style.pointerEvents = "none";
+  playhead.style.zIndex = "3";
+
+  timelineTrack.appendChild(playhead);
+}
+
+function updateKeyframeDisplay() {
+  if (!timelineTrack) return;
+
+  timelineTrack.querySelectorAll(".keyframe-dot").forEach(dot => {
+    dot.remove();
+  });
+
+  const start = getStartFrame();
+  const end = getEndFrame();
+
+  animationData.forEach((frames, object) => {
+    if (!object.parent) return;
+
+    frames.forEach((data, frame) => {
+      if (frame < start || frame > end) return;
+
+      const dot = document.createElement("div");
+
+      dot.className = "keyframe-dot";
+      dot.title = object.name + " — Frame " + frame;
+
+      const percentage = end === start
+        ? 0
+        : ((frame - start) / (end - start)) * 100;
+
+      dot.style.position = "absolute";
+      dot.style.left = percentage + "%";
+      dot.style.top = "0";
+      dot.style.width = "9px";
+      dot.style.height = "9px";
+      dot.style.background = "#9b7bff";
+      dot.style.transform = "translateX(-50%) rotate(45deg)";
+      dot.style.zIndex = "4";
+      dot.style.cursor = "pointer";
+
+      dot.addEventListener("click", event => {
+        event.stopPropagation();
+        stopPlayback();
+        setCurrentFrame(frame);
+        modeling.selectObject(object);
+      });
+
+      timelineTrack.appendChild(dot);
+    });
+  });
+
+  updatePlayhead();
+}
+
+// Click the timeline to scrub between frames.
+if (timelineTrack) {
+  timelineTrack.addEventListener("click", event => {
+    if (event.target.classList.contains("keyframe-dot")) return;
+
+    const rect = timelineTrack.getBoundingClientRect();
+
+    const percentage = THREE.MathUtils.clamp(
+      (event.clientX - rect.left) / rect.width,
+      0,
+      1
+    );
+
+    const frame =
+      getStartFrame() +
+      percentage * (getEndFrame() - getStartFrame());
+
+    stopPlayback();
+    setCurrentFrame(frame);
+  });
+}
+
+// ==========================================
+// PLAYBACK
+// ==========================================
+
+function startPlayback() {
+  if (isPlaying) return;
+
+  if (currentFrame >= getEndFrame()) {
+    setCurrentFrame(getStartFrame());
+  }
+
+  isPlaying = true;
+  lastPlaybackTime = 0;
+  playbackAccumulator = 0;
+
+  if (playButton) {
+    playButton.textContent = "Ⅱ Pause";
+  }
 
   window.dispatchEvent(
     new CustomEvent("editor-playback-change", {
       detail: { isPlaying }
     })
   );
+}
 
-  console.log(
-    isPlaying ? "Playback started" : "Playback stopped"
+function stopPlayback() {
+  if (!isPlaying) return;
+
+  isPlaying = false;
+
+  if (playButton) {
+    playButton.textContent = "▶ Play";
+  }
+
+  window.dispatchEvent(
+    new CustomEvent("editor-playback-change", {
+      detail: { isPlaying }
+    })
   );
 }
 
+function togglePlayback() {
+  if (isPlaying) {
+    stopPlayback();
+  } else {
+    startPlayback();
+  }
+}
+
+// Advance the animation using elapsed time.
+function updatePlayback(timestamp) {
+  if (!isPlaying) return;
+
+  if (!lastPlaybackTime) {
+    lastPlaybackTime = timestamp;
+    return;
+  }
+
+  const delta = Math.min(
+    (timestamp - lastPlaybackTime) / 1000,
+    0.1
+  );
+
+  lastPlaybackTime = timestamp;
+  playbackAccumulator += delta;
+
+  const frameDuration = 1 / getFPS();
+
+  while (playbackAccumulator >= frameDuration) {
+    playbackAccumulator -= frameDuration;
+
+    if (currentFrame >= getEndFrame()) {
+      stopPlayback();
+      return;
+    }
+
+    currentFrame++;
+    applyAnimationFrame(currentFrame);
+    updateFrameDisplay();
+  }
+}
+
+// ==========================================
+// TIMELINE BUTTONS
+// ==========================================
+
+if (previousFrameButton) {
+  previousFrameButton.addEventListener("click", previousFrame);
+}
+
+if (nextFrameButton) {
+  nextFrameButton.addEventListener("click", nextFrame);
+}
+
+if (addKeyframeButton) {
+  addKeyframeButton.addEventListener("click", addKeyframe);
+}
+
+if (playButton) {
+  playButton.addEventListener("click", togglePlayback);
+}
+
+if (startFrameInput) {
+  startFrameInput.addEventListener("change", () => {
+    stopPlayback();
+
+    if (Number(startFrameInput.value) < 1) {
+      startFrameInput.value = 1;
+    }
+
+    if (getEndFrame() < getStartFrame()) {
+      endFrameInput.value = getStartFrame();
+    }
+
+    setCurrentFrame(currentFrame);
+    updateKeyframeDisplay();
+  });
+}
+
+if (endFrameInput) {
+  endFrameInput.addEventListener("change", () => {
+    stopPlayback();
+
+    if (Number(endFrameInput.value) < getStartFrame()) {
+      endFrameInput.value = getStartFrame();
+    }
+
+    setCurrentFrame(currentFrame);
+    updateKeyframeDisplay();
+  });
+}
+
+// ==========================================
 // KEYBOARD CONTROLS
+// ==========================================
+
 window.addEventListener("keydown", event => {
   const target = event.target;
 
@@ -618,7 +1026,10 @@ window.addEventListener("keydown", event => {
   if (key === "s") modeling.setMode("scale");
 });
 
+// ==========================================
 // RESIZE
+// ==========================================
+
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -627,15 +1038,27 @@ window.addEventListener("resize", () => {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 });
 
+// ==========================================
 // RENDER LOOP
-function animate() {
+// ==========================================
+
+function animate(timestamp) {
   requestAnimationFrame(animate);
+
+  updatePlayback(timestamp);
+
   renderer.render(scene, camera);
 }
 
-animate();
+requestAnimationFrame(animate);
 
-// GLOBAL ACCESS
+// ==========================================
+// INITIALIZATION
+// ==========================================
+
+updateFrameDisplay();
+updateKeyframeDisplay();
+
 window.modeling = modeling;
 window.scene = scene;
 window.camera = camera;
@@ -643,5 +1066,10 @@ window.renderer = renderer;
 window.editorUndo = undo;
 window.editorRedo = redo;
 window.editorIsPlaying = () => isPlaying;
+window.editorCurrentFrame = () => currentFrame;
+window.editorAddKeyframe = addKeyframe;
+window.editorSetFrame = setCurrentFrame;
+
+commitHistory();
 
 console.log("3D ANIMATION STUDIO INITIALIZED");
