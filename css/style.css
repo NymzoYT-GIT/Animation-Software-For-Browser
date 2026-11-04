@@ -251,6 +251,22 @@ canvas {
     flex-wrap: wrap;
   }
 
+#timeline-track {
+  position: relative;
+  min-height: 45px;
+  cursor: crosshair;
+}
+
+.frame-marker {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.keyframe-dot {
+  display: block;
+}
+
   .timeline-settings {
     gap: 8px;
     flex-wrap: wrap;
