@@ -762,6 +762,51 @@ function updatePlayhead() {
   timelineTrack.appendChild(playhead);
 }
 
+
+function renderFrameMarkers() {
+  if (!timelineTrack) return;
+
+  timelineTrack.querySelectorAll(".frame-marker").forEach(marker => {
+    marker.remove();
+  });
+
+  const start = getStartFrame();
+  const end = getEndFrame();
+  const range = end - start;
+
+  // Choose a readable marker interval.
+  const step = range <= 20 ? 1 :
+    range <= 60 ? 5 :
+    range <= 120 ? 10 :
+    range <= 300 ? 20 : 50;
+
+  const frames = [start];
+
+  for (let frame = Math.ceil(start / step) * step;
+       frame < end;
+       frame += step) {
+    if (frame > start) frames.push(frame);
+  }
+
+  if (end !== start) frames.push(end);
+
+  frames.forEach(frame => {
+    const marker = document.createElement("div");
+
+    marker.className = "frame-marker";
+    marker.textContent = frame;
+    marker.style.position = "absolute";
+    marker.style.left =
+      ((frame - start) / (end - start || 1) * 100) + "%";
+    marker.style.top = "10px";
+    marker.style.transform = "translateX(-50%)";
+    marker.style.pointerEvents = "none";
+
+    timelineTrack.appendChild(marker);
+  });
+}
+
+
 function updateKeyframeDisplay() {
   if (!timelineTrack) return;
 
@@ -949,6 +994,7 @@ if (startFrameInput) {
     }
 
     setCurrentFrame(currentFrame);
+    renderFrameMarkers();
     updateKeyframeDisplay();
   });
 }
@@ -961,8 +1007,9 @@ if (endFrameInput) {
       endFrameInput.value = getStartFrame();
     }
 
-    setCurrentFrame(currentFrame);
-    updateKeyframeDisplay();
+  setCurrentFrame(currentFrame);
+  renderFrameMarkers();
+  updateKeyframeDisplay();
   });
 }
 
