@@ -55,11 +55,15 @@ let cameraDistance = Math.sqrt(99);
 
 function updateCamera() {
   cameraPhi = THREE.MathUtils.clamp(
-    cameraPhi, 0.05, Math.PI - 0.05
+    cameraPhi,
+    0.05,
+    Math.PI - 0.05
   );
 
   cameraDistance = THREE.MathUtils.clamp(
-    cameraDistance, 1, 100
+    cameraDistance,
+    1,
+    100
   );
 
   camera.position.set(
@@ -73,7 +77,7 @@ function updateCamera() {
 
 let previousPointer = null;
 
-renderer.domElement.addEventListener("pointermove", (event) => {
+renderer.domElement.addEventListener("pointermove", event => {
   if (!event.altKey) {
     previousPointer = null;
     return;
@@ -135,8 +139,12 @@ scene.add(sunlight);
 
 // GRID
 const grid = new THREE.GridHelper(
-  20, 20, "#777777", "#444444"
+  20,
+  20,
+  "#777777",
+  "#444444"
 );
+
 scene.add(grid);
 
 // HIERARCHY
@@ -194,6 +202,7 @@ function updateHierarchy() {
   }
 }
 
+// RENAME OBJECT
 if (renameButton) {
   renameButton.addEventListener("click", () => {
     const selected = modeling?.getSelected();
@@ -261,7 +270,9 @@ function restoreHistory(index) {
 }
 
 function undo() {
-  if (historyIndex > 0) restoreHistory(historyIndex - 1);
+  if (historyIndex > 0) {
+    restoreHistory(historyIndex - 1);
+  }
 }
 
 function redo() {
@@ -270,7 +281,7 @@ function redo() {
   }
 }
 
-// MODELING
+// MODELING SYSTEM
 modeling = createModelingSystem({
   scene,
   camera,
@@ -293,6 +304,7 @@ modeling = createModelingSystem({
   }
 });
 
+// CONNECT MODEL CREATION TO HISTORY
 ["addCube", "addSphere", "addCylinder", "addPlane"].forEach(method => {
   const original = modeling[method];
 
@@ -304,6 +316,7 @@ modeling = createModelingSystem({
   };
 });
 
+// DELETE HISTORY
 const originalDelete = modeling.deleteSelected;
 
 modeling.deleteSelected = function() {
@@ -317,16 +330,20 @@ modeling.deleteSelected = function() {
 // STARTER OBJECT
 modeling.addCube();
 
-// UNIVERSAL MODEL IMPORTER
+// MODEL IMPORTER
 const importButton = document.getElementById("import-model-button");
 const fileInput = document.getElementById("model-file-input");
 
+// FILE MANAGER
 function createLoadingManager(files) {
   const manager = new THREE.LoadingManager();
   const fileURLs = new Map();
 
   files.forEach(file => {
-    fileURLs.set(file.name.toLowerCase(), URL.createObjectURL(file));
+    fileURLs.set(
+      file.name.toLowerCase(),
+      URL.createObjectURL(file)
+    );
   });
 
   manager.setURLModifier(url => {
@@ -341,17 +358,19 @@ function createLoadingManager(files) {
 
   return {
     manager,
+
     cleanup() {
       fileURLs.forEach(url => URL.revokeObjectURL(url));
     }
   };
 }
 
-
+// ADD IMPORTED MODEL
 function addImportedModel(object, filename) {
   const name = filename.replace(/\.[^/.]+$/, "");
 
   const wrapper = new THREE.Group();
+
   wrapper.name = name;
   wrapper.add(object);
 
@@ -361,6 +380,7 @@ function addImportedModel(object, filename) {
 
   if (!box.isEmpty()) {
     const center = box.getCenter(new THREE.Vector3());
+
     wrapper.position.sub(center);
 
     const size = box.getSize(new THREE.Vector3());
@@ -380,36 +400,10 @@ function addImportedModel(object, filename) {
   console.log("Imported model:", filename);
 }
 
-
-  scene.add(wrapper);
-
-  wrapper.updateMatrixWorld(true);
-
-  const box = new THREE.Box3().setFromObject(wrapper);
-
-  if (!box.isEmpty()) {
-    const center = box.getCenter(new THREE.Vector3());
-
-    wrapper.position.sub(center);
-
-    const size = box.getSize(new THREE.Vector3());
-    const maxDimension = Math.max(size.x, size.y, size.z);
-
-    if (maxDimension > 0) {
-      const factor = 3 / maxDimension;
-      wrapper.scale.setScalar(factor);
-    }
-  }
-
-  modeling.selectObject(wrapper);
-  commitHistory();
-  updateHierarchy();
-
-  console.log("Imported model:", filename);
-}
-
+// LOAD MODEL
 async function loadModel(file, files) {
   const extension = file.name.split(".").pop().toLowerCase();
+
   const managerData = createLoadingManager(files);
   const manager = managerData.manager;
 
@@ -460,12 +454,14 @@ async function loadModel(file, files) {
             roughness: 0.6
           })
         );
+
         break;
       }
 
       case "dae": {
         const loader = new ColladaLoader(manager);
         const result = loader.parse(text, "");
+
         object = result.scene;
         break;
       }
@@ -474,27 +470,19 @@ async function loadModel(file, files) {
         const loader = new PLYLoader(manager);
         const geometry = loader.parse(buffer);
 
-        if (geometry.hasAttribute("color")) {
-          geometry.computeVertexNormals();
+        geometry.computeVertexNormals();
 
-          object = new THREE.Mesh(
-            geometry,
-            new THREE.MeshStandardMaterial({
-              vertexColors: true,
-              roughness: 0.7
-            })
-          );
-        } else {
-          geometry.computeVertexNormals();
+        object = new THREE.Mesh(
+          geometry,
+          new THREE.MeshStandardMaterial({
+            color: geometry.hasAttribute("color")
+              ? "#ffffff"
+              : "#b5b5c5",
+            vertexColors: geometry.hasAttribute("color"),
+            roughness: 0.7
+          })
+        );
 
-          object = new THREE.Mesh(
-            geometry,
-            new THREE.MeshStandardMaterial({
-              color: "#b5b5c5",
-              roughness: 0.7
-            })
-          );
-        }
         break;
       }
 
@@ -511,11 +499,15 @@ async function loadModel(file, files) {
       }
 
       default:
-        throw new Error("Unsupported model format: " + extension);
+        throw new Error(
+          "Unsupported model format: " + extension
+        );
     }
 
     if (!object) {
-      throw new Error("The model did not contain a usable scene.");
+      throw new Error(
+        "The model did not contain a usable scene."
+      );
     }
 
     addImportedModel(object, file.name);
@@ -527,11 +519,13 @@ async function loadModel(file, files) {
       "Could not import " + file.name +
       ". Check the file format and any required companion files."
     );
+
   } finally {
     managerData.cleanup();
   }
 }
 
+// IMPORT BUTTON
 if (importButton && fileInput) {
   importButton.addEventListener("click", () => {
     fileInput.click();
@@ -562,10 +556,12 @@ function togglePlayback() {
     })
   );
 
-  console.log(isPlaying ? "Playback started" : "Playback stopped");
+  console.log(
+    isPlaying ? "Playback started" : "Playback stopped"
+  );
 }
 
-// KEYBOARD
+// KEYBOARD CONTROLS
 window.addEventListener("keydown", event => {
   const target = event.target;
 
@@ -631,7 +627,7 @@ window.addEventListener("resize", () => {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 });
 
-// RENDER
+// RENDER LOOP
 function animate() {
   requestAnimationFrame(animate);
   renderer.render(scene, camera);
