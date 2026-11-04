@@ -347,22 +347,39 @@ function createLoadingManager(files) {
   };
 }
 
+
 function addImportedModel(object, filename) {
+  const name = filename.replace(/\.[^/.]+$/, "");
+
   const wrapper = new THREE.Group();
-
-  wrapper.name = filename.replace(/\.[^/.]+$/, "");
-  wrapper.userData.editorObject = true;
-  wrapper.userData.objectId = crypto.randomUUID();
-
+  wrapper.name = name;
   wrapper.add(object);
 
-  wrapper.traverse(child => {
-    if (child.isMesh) {
-      child.castShadow = true;
-      child.receiveShadow = true;
-      child.userData.editorObject = true;
+  wrapper.updateMatrixWorld(true);
+
+  const box = new THREE.Box3().setFromObject(wrapper);
+
+  if (!box.isEmpty()) {
+    const center = box.getCenter(new THREE.Vector3());
+    wrapper.position.sub(center);
+
+    const size = box.getSize(new THREE.Vector3());
+    const maxDimension = Math.max(size.x, size.y, size.z);
+
+    if (maxDimension > 0) {
+      const factor = 3 / maxDimension;
+      wrapper.scale.setScalar(factor);
     }
-  });
+  }
+
+  modeling.addImportedObject(wrapper, name);
+
+  commitHistory();
+  updateHierarchy();
+
+  console.log("Imported model:", filename);
+}
+
 
   scene.add(wrapper);
 
