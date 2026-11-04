@@ -7,12 +7,15 @@ export function createModelingSystem({
   camera,
   renderer,
   orbitControls,
-  onSelectionChange = () => {}
+  onSelectionChange = () => {},
+  onTransformStart = () => {},
+  onTransformEnd = () => {}
 }) {
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
 
   let selectedObject = null;
+  let objectCounter = 1;
 
   const transformControls = new TransformControls(
     camera,
@@ -22,16 +25,18 @@ export function createModelingSystem({
   scene.add(transformControls.getHelper());
 
   transformControls.addEventListener("dragging-changed", (event) => {
-    orbitControls.enabled = !event.value;
-  });
+    if (orbitControls) orbitControls.enabled = !event.value;
 
-  transformControls.addEventListener("objectChange", () => {
-    if (selectedObject) {
-      onSelectionChange(selectedObject);
+    if (event.value) {
+      onTransformStart(selectedObject);
+    } else {
+      onTransformEnd(selectedObject);
     }
   });
 
-  let objectCounter = 1;
+  transformControls.addEventListener("objectChange", () => {
+    if (selectedObject) onSelectionChange(selectedObject);
+  });
 
   function createMaterial(color = "#8b5cf6") {
     return new THREE.MeshStandardMaterial({
@@ -44,13 +49,14 @@ export function createModelingSystem({
   function registerObject(object, name) {
     object.name = name || `Object_${objectCounter}`;
     object.userData.editorObject = true;
-    object.userData.objectId = crypto.randomUUID();
+    object.userData.objectId =
+      crypto.randomUUID?.() ||
+      `object-${Date.now()}-${objectCounter}`;
 
     object.castShadow = true;
     object.receiveShadow = true;
 
     scene.add(object);
-
     objectCounter++;
 
     selectObject(object);
@@ -59,43 +65,38 @@ export function createModelingSystem({
   }
 
   function addCube() {
-    const geometry = new THREE.BoxGeometry(1, 1, 1);
-    const object = new THREE.Mesh(
-      geometry,
-      createMaterial("#8b5cf6")
+    return registerObject(
+      new THREE.Mesh(
+        new THREE.BoxGeometry(1, 1, 1),
+        createMaterial("#8b5cf6")
+      ),
+      "Cube"
     );
-
-    return registerObject(object, "Cube");
   }
 
   function addSphere() {
-    const geometry = new THREE.SphereGeometry(0.5, 32, 24);
-    const object = new THREE.Mesh(
-      geometry,
-      createMaterial("#06b6d4")
+    return registerObject(
+      new THREE.Mesh(
+        new THREE.SphereGeometry(0.5, 32, 24),
+        createMaterial("#06b6d4")
+      ),
+      "Sphere"
     );
-
-    return registerObject(object, "Sphere");
   }
 
   function addCylinder() {
-    const geometry = new THREE.CylinderGeometry(
-      0.5, 0.5, 1, 32
+    return registerObject(
+      new THREE.Mesh(
+        new THREE.CylinderGeometry(0.5, 0.5, 1, 32),
+        createMaterial("#f59e0b")
+      ),
+      "Cylinder"
     );
-
-    const object = new THREE.Mesh(
-      geometry,
-      createMaterial("#f59e0b")
-    );
-
-    return registerObject(object, "Cylinder");
   }
 
   function addPlane() {
-    const geometry = new THREE.PlaneGeometry(2, 2);
-
     const object = new THREE.Mesh(
-      geometry,
+      new THREE.PlaneGeometry(2, 2),
       createMaterial("#22c55e")
     );
 
@@ -105,9 +106,7 @@ export function createModelingSystem({
   }
 
   function selectObject(object) {
-    if (!object || !object.userData.editorObject) {
-      return;
-    }
+    if (!object || !object.userData.editorObject) return;
 
     selectedObject = object;
     transformControls.attach(object);
@@ -117,26 +116,23 @@ export function createModelingSystem({
 
   function deselectObject() {
     selectedObject = null;
+
     transformControls.detach();
 
     onSelectionChange(null);
   }
 
+  // Do not dispose geometry or materials here.
+  // History needs them to remain available for Undo.
   function deleteSelected() {
-    if (!selectedObject) return;
+    if (!selectedObject) return null;
 
     const object = selectedObject;
 
     deselectObject();
     scene.remove(object);
 
-    object.geometry?.dispose();
-
-    if (Array.isArray(object.material)) {
-      object.material.forEach(material => material.dispose());
-    } else {
-      object.material?.dispose();
-    }
+    return object;
   }
 
   function setMode(mode) {
@@ -165,7 +161,10 @@ export function createModelingSystem({
     const objects = [];
 
     scene.traverse((child) => {
-      if (child.isMesh && child.userData.editorObject) {
+      if (
+        child.isMesh &&
+        child.userData.editorObject
+      ) {
         objects.push(child);
       }
     });
@@ -189,6 +188,7 @@ export function createModelingSystem({
     addSphere,
     addCylinder,
     addPlane,
+
     selectObject,
     deselectObject,
     deleteSelected,
