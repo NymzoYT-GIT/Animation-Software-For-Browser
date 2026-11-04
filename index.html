@@ -29,7 +29,9 @@
 </header>
 
 <aside id="toolbar">
+
   <h3>CREATE</h3>
+
   <button onclick="modeling.addCube()">＋ Cube</button>
   <button onclick="modeling.addSphere()">＋ Sphere</button>
   <button onclick="modeling.addCylinder()">＋ Cylinder</button>
@@ -37,7 +39,29 @@
 
   <hr>
 
+  <h3>IMPORT</h3>
+
+  <button id="import-model-button">
+    ＋ Import 3D Model
+  </button>
+
+  <input
+    type="file"
+    id="model-file-input"
+    accept=".glb,.gltf,.obj,.fbx,.stl,.dae,.ply,.3mf,.usd,.usdz,.abc,.x3d"
+    multiple
+    hidden
+  >
+
+  <small class="import-info">
+    Import supported 3D model formats.
+    Some formats require accompanying files.
+  </small>
+
+  <hr>
+
   <h3>TRANSFORM</h3>
+
   <button onclick="modeling.setMode('move')">Move (G)</button>
   <button onclick="modeling.setMode('rotate')">Rotate (R)</button>
   <button onclick="modeling.setMode('scale')">Scale (S)</button>
@@ -47,6 +71,7 @@
   <button onclick="modeling.deleteSelected()" class="danger">
     Delete Object
   </button>
+
 </aside>
 
 <aside id="properties">
