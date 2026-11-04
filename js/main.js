@@ -2,10 +2,6 @@
 import * as THREE from "three";
 import { createModelingSystem } from "./modeling.js";
 
-// =====================================
-// 3D ANIMATION STUDIO
-// =====================================
-
 // SCENE
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#202127");
@@ -30,7 +26,6 @@ const renderer = new THREE.WebGLRenderer({
 
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -42,13 +37,7 @@ renderer.domElement.style.zIndex = "0";
 
 document.body.appendChild(renderer.domElement);
 
-// =====================================
 // CAMERA SYSTEM
-// =====================================
-
-// OrbitControls are replaced with custom
-// cursor-based camera controls.
-
 const orbitControls = { enabled: false };
 
 let cameraTheta = Math.atan2(5, 7);
@@ -57,26 +46,17 @@ let cameraDistance = Math.sqrt(99);
 
 function updateCamera() {
   cameraPhi = THREE.MathUtils.clamp(
-    cameraPhi,
-    0.05,
-    Math.PI - 0.05
+    cameraPhi, 0.05, Math.PI - 0.05
   );
 
   cameraDistance = THREE.MathUtils.clamp(
-    cameraDistance,
-    1,
-    100
+    cameraDistance, 1, 100
   );
 
   camera.position.set(
-    cameraTarget.x +
-      cameraDistance * Math.sin(cameraPhi) * Math.sin(cameraTheta),
-
-    cameraTarget.y +
-      cameraDistance * Math.cos(cameraPhi),
-
-    cameraTarget.z +
-      cameraDistance * Math.sin(cameraPhi) * Math.cos(cameraTheta)
+    cameraTarget.x + cameraDistance * Math.sin(cameraPhi) * Math.sin(cameraTheta),
+    cameraTarget.y + cameraDistance * Math.cos(cameraPhi),
+    cameraTarget.z + cameraDistance * Math.sin(cameraPhi) * Math.cos(cameraTheta)
   );
 
   camera.lookAt(cameraTarget);
@@ -106,16 +86,11 @@ renderer.domElement.addEventListener("pointermove", (event) => {
     y: event.clientY
   };
 
-  // CTRL + ALT = ROTATE CAMERA
   if (event.ctrlKey) {
     cameraTheta -= dx * 0.006;
     cameraPhi -= dy * 0.006;
-
     updateCamera();
-  }
-
-  // ALT = PAN CAMERA
-  else {
+  } else {
     const right = new THREE.Vector3();
     const up = new THREE.Vector3();
 
@@ -141,64 +116,24 @@ renderer.domElement.addEventListener("contextmenu", (event) => {
   event.preventDefault();
 });
 
-// =====================================
 // LIGHTING
-// =====================================
+scene.add(new THREE.AmbientLight("#ffffff", 1.5));
 
-scene.add(
-  new THREE.AmbientLight("#ffffff", 1.5)
-);
-
-const sunlight = new THREE.DirectionalLight(
-  "#ffffff",
-  3
-);
-
+const sunlight = new THREE.DirectionalLight("#ffffff", 3);
 sunlight.position.set(5, 10, 5);
 sunlight.castShadow = true;
-
 scene.add(sunlight);
 
-// =====================================
 // GRID
-// =====================================
-
 const grid = new THREE.GridHelper(
-  20,
-  20,
-  "#777777",
-  "#444444"
+  20, 20, "#777777", "#444444"
 );
-
 scene.add(grid);
 
-// =====================================
-// MODELING SYSTEM
-// =====================================
-
-const modeling = createModelingSystem({
-  scene,
-  camera,
-  renderer,
-  orbitControls,
-
-  onSelectionChange(object) {
-    const label = document.getElementById("selected-object");
-
-    if (label) {
-      label.textContent = object
-        ? object.name
-        : "Nothing selected";
-    }
-  }
-});
-
-// =====================================
-// UNDO AND REDO SYSTEM
-// =====================================
-
+// HISTORY SYSTEM
 let history = [];
 let historyIndex = -1;
+let transformDragBefore = null;
 
 function captureState() {
   return modeling.getObjects().map(object => ({
@@ -227,12 +162,10 @@ function restoreHistory(index) {
 
   modeling.deselectObject();
 
-  // Remove current editor objects
   modeling.getObjects().forEach(object => {
     scene.remove(object);
   });
 
-  // Restore previous objects
   const state = history[index];
 
   state.forEach(item => {
@@ -258,33 +191,60 @@ function redo() {
   }
 }
 
-// Wrap object creation methods for history
+// MODELING
+const modeling = createModelingSystem({
+  scene,
+  camera,
+  renderer,
+  orbitControls,
+
+  onSelectionChange(object) {
+    const label = document.getElementById("selected-object");
+
+    if (label) {
+      label.textContent = object
+        ? object.name
+        : "Nothing selected";
+    }
+  },
+
+  onTransformStart() {
+    transformDragBefore = captureState();
+  },
+
+  onTransformEnd() {
+    if (transformDragBefore) {
+      commitHistory();
+      transformDragBefore = null;
+    }
+  }
+});
+
+// TRACK OBJECT CREATION
 ["addCube", "addSphere", "addCylinder", "addPlane"].forEach(method => {
   const original = modeling[method];
 
-  modeling[method] = function (...args) {
+  modeling[method] = function(...args) {
     const result = original.apply(modeling, args);
     commitHistory();
     return result;
   };
 });
 
+// TRACK OBJECT DELETION
 const originalDelete = modeling.deleteSelected;
 
-modeling.deleteSelected = function () {
+modeling.deleteSelected = function() {
   if (!modeling.getSelected()) return;
 
   originalDelete.call(modeling);
   commitHistory();
 };
 
-// STARTING OBJECT
+// STARTER OBJECT
 modeling.addCube();
 
-// =====================================
-// ANIMATION PLAYBACK STATE
-// =====================================
-
+// PLAYBACK STATE
 let isPlaying = false;
 
 function togglePlayback() {
@@ -301,12 +261,7 @@ function togglePlayback() {
   );
 }
 
-// =====================================
-// KEYBOARD CONTROLS
-// =====================================
-
-let transformBefore = null;
-
+// KEYBOARD
 window.addEventListener("keydown", (event) => {
   const target = event.target;
 
@@ -316,62 +271,47 @@ window.addEventListener("keydown", (event) => {
     target instanceof HTMLSelectElement
   ) return;
 
-  // UNDO
   if (event.ctrlKey && event.key.toLowerCase() === "z") {
     event.preventDefault();
-
     if (!event.repeat) undo();
     return;
   }
 
-  // REDO
   if (event.ctrlKey && event.key.toLowerCase() === "y") {
     event.preventDefault();
-
     if (!event.repeat) redo();
     return;
   }
 
-  // ZOOM IN
   if (event.ctrlKey && event.key === "ArrowUp") {
     event.preventDefault();
-
     cameraDistance *= 0.9;
     updateCamera();
     return;
   }
 
-  // ZOOM OUT
   if (event.ctrlKey && event.key === "ArrowDown") {
     event.preventDefault();
-
     cameraDistance *= 1.1;
     updateCamera();
     return;
   }
 
-  // DELETE
   if (event.ctrlKey && event.key === "Backspace") {
     event.preventDefault();
-
     if (!event.repeat) modeling.deleteSelected();
     return;
   }
 
-  // PLAY / PAUSE
   if (event.code === "Space") {
     event.preventDefault();
-
     if (!event.repeat) togglePlayback();
     return;
   }
 
   if (event.ctrlKey || event.altKey || event.repeat) return;
 
-  // TRANSFORM CONTROLS
   if (["g", "r", "s"].includes(event.key.toLowerCase())) {
-    transformBefore = captureState();
-
     if (event.key.toLowerCase() === "g") {
       modeling.setMode("move");
     }
@@ -386,59 +326,30 @@ window.addEventListener("keydown", (event) => {
   }
 });
 
-// Save completed transformations to history
-window.addEventListener("keyup", (event) => {
-  if (
-    transformBefore &&
-    ["g", "r", "s"].includes(event.key.toLowerCase())
-  ) {
-    commitHistory();
-    transformBefore = null;
-  }
-});
-
-// =====================================
-// WINDOW RESIZING
-// =====================================
-
+// RESIZE
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
 
-  renderer.setSize(
-    window.innerWidth,
-    window.innerHeight
-  );
-
-  renderer.setPixelRatio(
-    Math.min(window.devicePixelRatio, 1.5)
-  );
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 });
 
-// =====================================
-// ANIMATION LOOP
-// =====================================
-
+// RENDER LOOP
 function animate() {
   requestAnimationFrame(animate);
-
   renderer.render(scene, camera);
 }
 
 animate();
 
-// =====================================
-// GLOBAL EDITOR ACCESS
-// =====================================
-
+// GLOBAL ACCESS
 window.modeling = modeling;
 window.scene = scene;
 window.camera = camera;
 window.renderer = renderer;
-
 window.editorUndo = undo;
 window.editorRedo = redo;
-
 window.editorIsPlaying = () => isPlaying;
 
 console.log("3D ANIMATION STUDIO INITIALIZED");
