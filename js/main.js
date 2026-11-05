@@ -569,6 +569,7 @@ if (importButton && fileInput) {
 
 // Each object gets its own collection of keyframes.
 const animationData = new Map();
+let selectedKeyframe = null;
 
 let currentFrame = 1;
 let isPlaying = false;
@@ -825,6 +826,11 @@ function updateKeyframeDisplay() {
 
       const dot = document.createElement("div");
 
+      const isSelected =
+        selectedKeyframe &&
+        selectedKeyframe.object === object &&
+        selectedKeyframe.frame === frame;
+
       dot.className = "keyframe-dot";
       dot.title = object.name + " — Frame " + frame;
 
@@ -835,18 +841,29 @@ function updateKeyframeDisplay() {
       dot.style.position = "absolute";
       dot.style.left = percentage + "%";
       dot.style.top = "0";
-      dot.style.width = "9px";
-      dot.style.height = "9px";
-      dot.style.background = "#9b7bff";
+      dot.style.width = isSelected ? "13px" : "9px";
+      dot.style.height = isSelected ? "13px" : "9px";
+      dot.style.background = isSelected ? "#ffb347" : "#9b7bff";
+      dot.style.border = isSelected ? "2px solid white" : "none";
+      dot.style.boxSizing = "border-box";
       dot.style.transform = "translateX(-50%) rotate(45deg)";
       dot.style.zIndex = "4";
       dot.style.cursor = "pointer";
 
       dot.addEventListener("click", event => {
         event.stopPropagation();
+
         stopPlayback();
-        setCurrentFrame(frame);
+
+        selectedKeyframe = {
+          object,
+          frame
+        };
+
         modeling.selectObject(object);
+        setCurrentFrame(frame);
+
+        updateKeyframeDisplay();
       });
 
       timelineTrack.appendChild(dot);
